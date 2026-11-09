@@ -1,0 +1,474 @@
+---
+title: "Comparing Multivariate and Univariate k-Means Clustering"
+subtitle: "A Simulation Study of Three Scenarios Across Five Levels of Within-Cluster Spread"
+author: "Susan Peck"
+date: "November 8, 2026"
+output:
+  bookdown::pdf_document2:
+    toc: false
+bibliography: references.bib
+link-citations: true
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+# Hide code, messages and warnings in the knitted report
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+# Load the mclust package (for ARI)
+library(mclust)
+
+# Number of observations in each true cluster
+n_per_cluster <- 200
+
+# Number of simulated repeated datasets for each scenario
+n_reps <- 500
+
+# Number of random starting points for k-means
+n_starts <- 50
+
+# Standard deviation values to compare
+sd_values <- c(2, 3, 4, 5, 6)
+
+# Total number of rows for results table
+total_rows <- length(sd_values) * n_reps
+
+# True group label for every observation
+true_labels <- rep(c(1, 2, 3), each = n_per_cluster)
+```
+
+# Introduction
+
+Datasets often have many variables that represent different measurements
+on the same observation. When analyzed, is it better to look at each of
+the variables separately, one at a time, or is there a benefit to
+analyzing the data using multiple variables at the same time? This project
+aims to look at clustering situations where there is no additional
+information to be had when multiple variables are used, and when the
+only way to gain useful information is when multiple variables are used.
+
+Clustering can be a difficult task. In order to cluster, you first have
+to determine if there is a possibility of clusters in your data. Should
+clustering even be attempted? Second, do you know how many clusters
+there are in the data? Do you have some idea of the underlying grouping
+in the data, or are you exploring the data and trying to figure out how
+many distinct or fuzzy groups there are? Then you have to pick a method
+or multiple methods, which again means you are making decisions based on
+knowing or not knowing the form of the data. Do you know the
+distributions of each variable? Are the data for each cluster tightly
+packed in a sphere? Do you have a situation where one cluster is
+literally inside another, and non-spherical in form?
+
+This project narrows the clustering problem down to multivariate normal
+data, with three clusters using k-means [@hartigan1979kmeans] in order to focus on the
+differences in performance between using single variables versus
+multiple variables. This project creates three different simulated
+scenarios and compares how well univariate and multivariate methods work
+for recovering the true clusters. The data for each scenario are
+generated using normal distributions with 200 observations per cluster and three
+variables. Then the datasets are clustered using k-means [@everitt2011cluster, chap. 5] with three
+clusters, using each of the variables separately, and then with all
+three variables. The clustering results were scored against the known
+true groups using the adjusted Rand index (ARI) [@hubert1985comparing]. The index was computed with the
+mclust package [@scrucca2023mclust] in R [@rcore].
+
+Across the three scenarios, the benefit of using multiple variables in the cluster recovery depended on both the scenario and the standard deviation. When every variable separated all three clusters (Scenario 1), it was expected that univariate clustering would do well. However, clustering on all three variables still gave a higher mean ARI for every standard deviation (SD). As the SD increased, the advantage of multivariate clustering grew. When each variable separated only one cluster (Scenario 2), it was expected that univariate clustering would not do well, and this matched the results. The single variables had low ARI values, and the multivariate approach did much better. When only Variable 1 carried signal (Scenario 3), it was expected that the noise from Variables 2 and 3 may cause multivariate clustering to do less well than univariate. However, univariate and multivariate performed almost the same for smaller SD values, and the multivariate approach was only slightly worse at SD = 5 and SD = 6. Overall, clustering did better for smaller SD values, multiple variables helped most when signal was shared across variables, and they had no benefit when the extra variables were pure noise.
+
+# Data
+
+This project uses simulated data and creates three different scenarios.
+Each scenario has three true clusters of data with 200 observations
+generated from a normal distribution for 600 total
+observations. Each cluster has its own mean vector. Each observational
+unit is an independent simulated observation with three independent
+continuous variables called Variable 1, Variable 2, and Variable 3. Each
+of the three scenarios described below was run at five different common
+standard deviation values: 2, 3, 4, 5, and 6.
+
+Each observation $\mathbf{x}$ from cluster $j$ follows a multivariate
+normal distribution with mean vector $\boldsymbol{\mu}_j$ and covariance
+matrix $\sigma^2 \mathbf{I}_3$:
+$$\mathbf{x} \sim N_3\left(\boldsymbol{\mu}_j, \sigma^2 \mathbf{I}_3\right), \quad j = 1, 2, 3,$$
+where $\mathbf{I}_3$ is the $3 \times 3$ identity matrix, so the three
+variables are independent within a cluster, and
+$\sigma \in \{2, 3, 4, 5, 6\}$ is the common standard deviation.
+
+- **Scenario 1:** Each of the three variables independently separates all three
+  clusters. The mean of each cluster is distinct for each variable.
+
+  $$\boldsymbol{\mu}_1 = (0, 10, -10)^T, \quad \boldsymbol{\mu}_2 = (-10, 0, 10)^T, \quad \boldsymbol{\mu}_3 = (10, -10, 0)^T$$
+
+- **Scenario 2:** Each variable isolates one cluster. For each variable, the
+  mean for two clusters is the same value, and the third cluster has a
+  different mean value. The cluster that is isolated is different for
+  each variable (Variable 1 isolates the first cluster, etc.).
+
+  $$\boldsymbol{\mu}_1 = (10, 0, 0)^T, \quad \boldsymbol{\mu}_2 = (0, 10, 0)^T, \quad \boldsymbol{\mu}_3 = (0, 0, 10)^T$$
+
+- **Scenario 3:** Variable 1 carries the only signal separating the clusters. Only
+  that first variable has distinct means for each of the clusters.
+  Variables 2 and 3 have the same mean for all three clusters.
+
+  $$\boldsymbol{\mu}_1 = (0, 0, 0)^T, \quad \boldsymbol{\mu}_2 = (-10, 0, 0)^T, \quad \boldsymbol{\mu}_3 = (10, 0, 0)^T$$
+
+Figure \@ref(fig:example-data) shows an example of each scenario, using an
+SD of 4. The first row of plots shows how Scenario 1 separates the
+clusters for each pair of variables. Each plot shows two of the
+variables, and you can see that the means are distinct in both the x and
+the y coordinates for all three plots.
+
+The second row illustrates how, in Scenario 2, the clusters appear
+different, but the means of two of the three clusters have the same
+value. In the left plot, the red and green clusters have the same x
+coordinate for their mean vector, but different y coordinates. The green
+and black clusters have distinct x coordinates, but the same y value.
+
+The third row shows that in Scenario 3, only Variable 1 separates the clusters. This is most apparent in the plot on the far right showing complete overlap and identical mean values for both Variable 2 and Variable 3. The left and middle plots show that Variable 1 has distinct mean values for all three clusters with different x coordinates.
+
+```{r example-data, fig.width=7, fig.height=6.5, fig.cap="One simulated dataset per scenario using SD 4. Row 1 is Scenario 1, Row 2 is Scenario 2, Row 3 is Scenario 3. Black is cluster 1, red is cluster 2 and green is cluster 3."}
+
+# Set the seed so the example figure is the same every time the report is knitted
+set.seed(1)
+
+# Standard deviation used for the example figure only
+example_sd <- 4
+
+# Example data for scenario 1: each variable is built from three groups of 200
+ex1_v1 <- c(rnorm(n_per_cluster, 0, example_sd), rnorm(n_per_cluster, -10, example_sd), rnorm(n_per_cluster, 10, example_sd))
+ex1_v2 <- c(rnorm(n_per_cluster, 10, example_sd), rnorm(n_per_cluster, 0, example_sd), rnorm(n_per_cluster, -10, example_sd))
+ex1_v3 <- c(rnorm(n_per_cluster, -10, example_sd), rnorm(n_per_cluster, 10, example_sd), rnorm(n_per_cluster, 0, example_sd))
+
+# Example data for scenario 2
+# Each variable is different for only one cluster
+ex2_v1 <- c(rnorm(n_per_cluster, 10, example_sd), rnorm(n_per_cluster, 0, example_sd), rnorm(n_per_cluster, 0, example_sd))
+ex2_v2 <- c(rnorm(n_per_cluster, 0, example_sd), rnorm(n_per_cluster, 10, example_sd), rnorm(n_per_cluster, 0, example_sd))
+ex2_v3 <- c(rnorm(n_per_cluster, 0, example_sd), rnorm(n_per_cluster, 0, example_sd), rnorm(n_per_cluster, 10, example_sd))
+
+# Example data for scenario 3
+# Variables 2 and 3 have the same mean for all observations
+ex3_v1 <- c(rnorm(n_per_cluster, 0, example_sd), rnorm(n_per_cluster, -10, example_sd), rnorm(n_per_cluster, 10, example_sd))
+ex3_v2 <- rnorm(3 * n_per_cluster, 0, example_sd)
+ex3_v3 <- rnorm(3 * n_per_cluster, 0, example_sd)
+
+# Find the smallest and largest value for the graph axes to be consistent
+axis_limits <- range(c(ex1_v1, ex1_v2, ex1_v3, ex2_v1, ex2_v2, ex2_v3, ex3_v1, ex3_v2, ex3_v3))
+
+# Arrange the plots in a grid of 3 rows and 3 columns
+par(mfrow = c(3, 3), mar = c(4, 4, 2, 1))
+
+# Row 1: scenario 1
+plot(ex1_v1, ex1_v2, col = true_labels, pch = 16, cex = 0.4, xlab = "Variable 1", ylab = "Variable 2", main = "Scenario 1", cex.main = 0.9, xlim = axis_limits, ylim = axis_limits)
+plot(ex1_v1, ex1_v3, col = true_labels, pch = 16, cex = 0.4, xlab = "Variable 1", ylab = "Variable 3", main = "Scenario 1", cex.main = 0.9, xlim = axis_limits, ylim = axis_limits)
+plot(ex1_v2, ex1_v3, col = true_labels, pch = 16, cex = 0.4, xlab = "Variable 2", ylab = "Variable 3", main = "Scenario 1", cex.main = 0.9, xlim = axis_limits, ylim = axis_limits)
+
+# Row 2: scenario 2
+plot(ex2_v1, ex2_v2, col = true_labels, pch = 16, cex = 0.4, xlab = "Variable 1", ylab = "Variable 2", main = "Scenario 2", cex.main = 0.9, xlim = axis_limits, ylim = axis_limits)
+plot(ex2_v1, ex2_v3, col = true_labels, pch = 16, cex = 0.4, xlab = "Variable 1", ylab = "Variable 3", main = "Scenario 2", cex.main = 0.9, xlim = axis_limits, ylim = axis_limits)
+plot(ex2_v2, ex2_v3, col = true_labels, pch = 16, cex = 0.4, xlab = "Variable 2", ylab = "Variable 3", main = "Scenario 2", cex.main = 0.9, xlim = axis_limits, ylim = axis_limits)
+
+# Row 3: scenario 3
+plot(ex3_v1, ex3_v2, col = true_labels, pch = 16, cex = 0.4, xlab = "Variable 1", ylab = "Variable 2", main = "Scenario 3", cex.main = 0.9, xlim = axis_limits, ylim = axis_limits)
+plot(ex3_v1, ex3_v3, col = true_labels, pch = 16, cex = 0.4, xlab = "Variable 1", ylab = "Variable 3", main = "Scenario 3", cex.main = 0.9, xlim = axis_limits, ylim = axis_limits)
+plot(ex3_v2, ex3_v3, col = true_labels, pch = 16, cex = 0.4, xlab = "Variable 2", ylab = "Variable 3", main = "Scenario 3", cex.main = 0.9, xlim = axis_limits, ylim = axis_limits)
+```
+
+# Methods
+
+**Simulation.** Three scenarios were each run at five SD values, giving 15 cases. For each case, 500 datasets of 600 observations were generated as described in Section \@ref(data), using the random normal function `rnorm()` in R [@rcore]. k-means clustering was applied four times to each dataset, once for each variable separately and once for all three variables together. Each result was scored using the ARI, and the scores were averaged over the 500 datasets for each case.
+
+**k-Means.** k-means is a clustering method that divides a data set into a known number of groups, called clusters. In this project, the data have exactly three clusters, and only $k = 3$ was used every time. k-means is an iterative process that picks a center for each cluster, assigns each observation to a cluster, and then recalculates the centers. For the multivariate runs, the centers are mean vectors of length three. For the univariate runs, the centers are single values. The initial centers are a random set of observations chosen from the data. Each observation is then assigned to the nearest center using Euclidean distance. After all observations are assigned, the new center of each cluster is calculated as the mean of its current observations, and all observations are re-assigned to their nearest center. Theoretically the iterations end when no observation changes cluster. This is a simplified description where every observation is assigned every iteration. R's `kmeans()` function uses the algorithm of Hartigan and Wong by default [@hartigan1979kmeans], which compares how much the total within-cluster sum of squares ($W$, defined below) would drop if an observation left its current cluster to how much $W$ would rise if the observation joined another cluster, the second-nearest cluster. If the move lowers $W$, the observation is moved, and the centers of the two affected clusters are recalculated immediately, not at the end of assigning all observations. The `kmeans()` function was run using 50 random starts and a maximum of 100 iterations (reaching the maximum is flagged as a failure to converge).
+
+The formulas below show the quantity that k-means minimizes, the total within-cluster sum of squares $W$ [@everitt2011cluster, chap. 5]. Let $x_i$ be the measurements for observation $i$, which is one number in the single-variable runs and three numbers in the multivariate runs. Then $W$ adds up the squared distances between each observation $x_i$ and the mean $\mu_j$ of its cluster $C_j$, over all $k$ clusters, where $|C_j|$ is the number of observations in cluster $j$:
+
+$$W = \sum_{j=1}^{k} \sum_{x_i \in C_j} \| x_i - \mu_j \|^2, \qquad \mu_j = \frac{1}{|C_j|} \sum_{x_i \in C_j} x_i.$$
+
+**Adjusted Rand index.** The ARI was used to compare how well k-means recovered the true clusters. The ARI takes every pair of observations and checks whether they are in the same true group and whether they are in the same cluster. This leads to four possibilities. Let $N_{11}$ be the number of pairs that are together in the true groups and together in the clustering, $N_{10}$ the number together in the true groups but apart in the clustering, $N_{01}$ the number apart in the true groups but together in the clustering, and $N_{00}$ the number apart in both. Then
+
+$$
+\text{ARI}=\frac{2\,(N_{11}N_{00}-N_{10}N_{01})}{(N_{11}+N_{10})(N_{10}+N_{00})+(N_{11}+N_{01})(N_{01}+N_{00})}.
+$$
+
+An ARI of 1 means the clustering matches the true groups exactly, and a value near 0 means the agreement is no better than random clustering [@hubert1985comparing]. The ARI for each clustering of each dataset was computed using the `adjustedRandIndex()` function in the `mclust` package [@scrucca2023mclust].
+
+**Expected results.** The expected results from this simulation are that in Scenario 1, k-means should recover the clusters well using only one variable at a time, especially at a small SD value, and the multivariate approach should have an increased advantage as the SD grows, because combining the variables increases the distance between cluster centers. In Scenario 2, no single variable could separate all three clusters, so the multivariate approach should show substantially better recovery of clusters at both small and large SD. In Scenario 3, only Variable 1 carries any signal, so k-means using Variable 1 should recover the clusters well, especially at a smaller SD. The multivariate approach has noise from the other two variables, possibly lowering the multivariate mean ARI compared to the univariate results using Variable 1.
+
+# Results
+
+Table \@ref(tab:summary-table) lists the mean ARI over the 500 simulated datasets for each scenario, SD and method, and Figure \@ref(fig:line-plots) shows the same values plotted against SD. In Scenarios 1 and 2, the three single variables have the same design, so their values are nearly identical and Variable 1 is reported here as the representative.
+
+```{r simulation-1}
+# Set the seed so the results can be reproduced
+set.seed(101)
+
+# Create an empty results table with one row for every SD and replicate pairing
+# The sd_used column repeats each SD value 500 times and the other columns start empty (NA)
+results1 <- data.frame(sd_used = rep(sd_values, each = n_reps),
+                       var1 = rep(NA, total_rows), var2 = rep(NA, total_rows),
+                       var3 = rep(NA, total_rows), all3 = rep(NA, total_rows))
+
+# Outer loop: s1_i counts through the five SD values
+for (s1_i in 1:5) {
+
+  # Look up the SD for this pass of the outer loop
+  s1_sd <- sd_values[s1_i]
+
+  # Inner loop: s1_r counts through the 500 replicates
+  for (s1_r in 1:n_reps) {
+
+    # Work out which row of the results table this SD and replicate belong in
+    s1_row <- (s1_i - 1) * n_reps + s1_r
+
+    # Draw Variable 1: cluster means 0, -10, 10
+    s1_v1 <- c(rnorm(n_per_cluster, 0, s1_sd), rnorm(n_per_cluster, -10, s1_sd), rnorm(n_per_cluster, 10, s1_sd))
+
+    # Draw Variable 2: cluster means 10, 0, -10
+    s1_v2 <- c(rnorm(n_per_cluster, 10, s1_sd), rnorm(n_per_cluster, 0, s1_sd), rnorm(n_per_cluster, -10, s1_sd))
+
+    # Draw Variable 3: cluster means -10, 10, 0
+    s1_v3 <- c(rnorm(n_per_cluster, -10, s1_sd), rnorm(n_per_cluster, 10, s1_sd), rnorm(n_per_cluster, 0, s1_sd))
+
+    # Combine the three variables side by side into a table with 600 rows and 3 columns
+    s1_all <- cbind(s1_v1, s1_v2, s1_v3)
+
+    # Run k-means with 3 clusters on Variable 1 alone
+    s1_f1 <- kmeans(s1_v1, centers = 3, nstart = n_starts, iter.max = 100)
+
+    # Run k-means with 3 clusters on Variable 2 alone
+    s1_f2 <- kmeans(s1_v2, centers = 3, nstart = n_starts, iter.max = 100)
+
+    # Run k-means with 3 clusters on Variable 3 alone
+    s1_f3 <- kmeans(s1_v3, centers = 3, nstart = n_starts, iter.max = 100)
+
+    # Run k-means with 3 clusters on all three variables together
+    s1_fall <- kmeans(s1_all, centers = 3, nstart = n_starts, iter.max = 100)
+
+    # Score each clustering against the true labels and store the ARI in the matching row
+    results1$var1[s1_row] <- adjustedRandIndex(s1_f1$cluster, true_labels)
+    results1$var2[s1_row] <- adjustedRandIndex(s1_f2$cluster, true_labels)
+    results1$var3[s1_row] <- adjustedRandIndex(s1_f3$cluster, true_labels)
+    results1$all3[s1_row] <- adjustedRandIndex(s1_fall$cluster, true_labels)
+  }
+}
+```
+
+```{r simulation-2}
+# Set the seed so the results can be reproduced
+set.seed(102)
+
+# Create an empty results table with one row for every SD and replicate pairing
+results2 <- data.frame(sd_used = rep(sd_values, each = n_reps),
+                       var1 = rep(NA, total_rows), var2 = rep(NA, total_rows),
+                       var3 = rep(NA, total_rows), all3 = rep(NA, total_rows))
+
+# Outer loop: s2_i counts through the five SD values
+for (s2_i in 1:5) {
+
+  # Look up the SD for this pass of the outer loop
+  s2_sd <- sd_values[s2_i]
+
+  # Inner loop: s2_r counts through the 500 replicates
+  for (s2_r in 1:n_reps) {
+
+    # Work out which row of the results table this SD and replicate belong in
+    s2_row <- (s2_i - 1) * n_reps + s2_r
+
+    # Draw Variable 1: only cluster 1 has mean 10, the others have mean 0
+    s2_v1 <- c(rnorm(n_per_cluster, 10, s2_sd), rnorm(n_per_cluster, 0, s2_sd), rnorm(n_per_cluster, 0, s2_sd))
+
+    # Draw Variable 2: only cluster 2 has mean 10, the others have mean 0
+    s2_v2 <- c(rnorm(n_per_cluster, 0, s2_sd), rnorm(n_per_cluster, 10, s2_sd), rnorm(n_per_cluster, 0, s2_sd))
+
+    # Draw Variable 3: only cluster 3 has mean 10, the others have mean 0
+    s2_v3 <- c(rnorm(n_per_cluster, 0, s2_sd), rnorm(n_per_cluster, 0, s2_sd), rnorm(n_per_cluster, 10, s2_sd))
+
+    # Combine the three variables side by side into a table with 600 rows and 3 columns
+    s2_all <- cbind(s2_v1, s2_v2, s2_v3)
+
+    # Run k-means with 3 clusters on Variable 1 alone
+    s2_f1 <- kmeans(s2_v1, centers = 3, nstart = n_starts, iter.max = 100)
+
+    # Run k-means with 3 clusters on Variable 2 alone
+    s2_f2 <- kmeans(s2_v2, centers = 3, nstart = n_starts, iter.max = 100)
+
+    # Run k-means with 3 clusters on Variable 3 alone
+    s2_f3 <- kmeans(s2_v3, centers = 3, nstart = n_starts, iter.max = 100)
+
+    # Run k-means with 3 clusters on all three variables together
+    s2_fall <- kmeans(s2_all, centers = 3, nstart = n_starts, iter.max = 100)
+
+    # Score each clustering against the true labels and store the ARI in the matching row
+    results2$var1[s2_row] <- adjustedRandIndex(s2_f1$cluster, true_labels)
+    results2$var2[s2_row] <- adjustedRandIndex(s2_f2$cluster, true_labels)
+    results2$var3[s2_row] <- adjustedRandIndex(s2_f3$cluster, true_labels)
+    results2$all3[s2_row] <- adjustedRandIndex(s2_fall$cluster, true_labels)
+  }
+}
+```
+
+```{r simulation-3}
+# Set the seed so the results can be reproduced
+set.seed(103)
+
+# Create an empty results table with one row for every SD and replicate pairing
+results3 <- data.frame(sd_used = rep(sd_values, each = n_reps),
+                       var1 = rep(NA, total_rows), var2 = rep(NA, total_rows),
+                       var3 = rep(NA, total_rows), all3 = rep(NA, total_rows))
+
+# Outer loop: s3_i counts through the five SD values
+for (s3_i in 1:5) {
+
+  # Look up the SD for this pass of the outer loop
+  s3_sd <- sd_values[s3_i]
+
+  # Inner loop: s3_r counts through the 500 replicates
+  for (s3_r in 1:n_reps) {
+
+    # Work out which row of the results table this SD and replicate belong in
+    s3_row <- (s3_i - 1) * n_reps + s3_r
+
+    # Draw Variable 1: cluster means 0, -10, 10
+    s3_v1 <- c(rnorm(n_per_cluster, 0, s3_sd), rnorm(n_per_cluster, -10, s3_sd), rnorm(n_per_cluster, 10, s3_sd))
+
+    # Draw Variable 2: the same mean of 0 for all 600 observations, so no signal
+    s3_v2 <- rnorm(3 * n_per_cluster, 0, s3_sd)
+
+    # Draw Variable 3: the same mean of 0 for all 600 observations, so no signal
+    s3_v3 <- rnorm(3 * n_per_cluster, 0, s3_sd)
+
+    # Combine the three variables side by side into a table with 600 rows and 3 columns
+    s3_all <- cbind(s3_v1, s3_v2, s3_v3)
+
+    # Run k-means with 3 clusters on Variable 1 alone
+    s3_f1 <- kmeans(s3_v1, centers = 3, nstart = n_starts, iter.max = 100)
+
+    # Run k-means with 3 clusters on Variable 2 alone
+    s3_f2 <- kmeans(s3_v2, centers = 3, nstart = n_starts, iter.max = 100)
+
+    # Run k-means with 3 clusters on Variable 3 alone
+    s3_f3 <- kmeans(s3_v3, centers = 3, nstart = n_starts, iter.max = 100)
+
+    # Run k-means with 3 clusters on all three variables together
+    s3_fall <- kmeans(s3_all, centers = 3, nstart = n_starts, iter.max = 100)
+
+    # Score each clustering against the true labels and store the ARI in the matching row
+    results3$var1[s3_row] <- adjustedRandIndex(s3_f1$cluster, true_labels)
+    results3$var2[s3_row] <- adjustedRandIndex(s3_f2$cluster, true_labels)
+    results3$var3[s3_row] <- adjustedRandIndex(s3_f3$cluster, true_labels)
+    results3$all3[s3_row] <- adjustedRandIndex(s3_fall$cluster, true_labels)
+  }
+}
+```
+
+```{r summary-calc}
+# Store the three results tables together in one list so a loop can visit each one
+all_results <- list(results1, results2, results3)
+
+# Create a table with 15 rows, one for each scenario and SD pairing, to hold mean ARI values
+summary_table <- data.frame(
+  Scenario = rep(c("1", "2", "3"), each = 5),
+  SD = rep(sd_values, times = 3),
+  Var1 = rep(NA, 15), Var2 = rep(NA, 15), Var3 = rep(NA, 15), All3 = rep(NA, 15)
+)
+
+# Outer loop: sum_s counts through the three scenarios
+for (sum_s in 1:3) {
+
+  # Loop over the five SD values
+  for (sum_j in 1:5) {
+
+    # Work out which row of the summary table this scenario and SD belong in
+    sum_row <- (sum_s - 1) * 5 + sum_j
+
+    # Pull out the results table for the current scenario (double brackets select one item from a list)
+    sum_scen <- all_results[[sum_s]]
+
+    # Keep only the 500 rows that used this SD (the comparison picks rows where sd_used matches)
+    sum_rows <- sum_scen[sum_scen$sd_used == sd_values[sum_j], ]
+
+    # Mean ARI across the 500 replicates for each of the four methods
+    summary_table$Var1[sum_row] <- mean(sum_rows$var1)
+    summary_table$Var2[sum_row] <- mean(sum_rows$var2)
+    summary_table$Var3[sum_row] <- mean(sum_rows$var3)
+    summary_table$All3[sum_row] <- mean(sum_rows$all3)
+  }
+}
+
+# Turn the 15 by 4 block of mean ARI values (columns 3 to 6) into text with three decimals
+# The sprintf command with "%.3f" keeps trailing zeros, so 1 prints as 1.000
+# The matrix command rebuilds the 15 rows and 4 columns, and dimnames labels each row
+# with the scenario and SD (for example "1_2" is Scenario 1 at SD 2) and each column with the method
+# The report text uses these labels to pull in values without typing the numbers by hand
+txt_ari <- matrix(sprintf("%.3f", as.matrix(summary_table[, 3:6])), nrow = 15,
+                  dimnames = list(paste0(summary_table$Scenario, "_", summary_table$SD),
+                                  c("Var1", "Var2", "Var3", "All3")))
+```
+
+**Scenario 1.** In this scenario, all three clusters had distinct means for every variable. Univariate k-means clustering recovered the clusters well at SD = 2, where the clusters were well separated, with a mean ARI of `r txt_ari["1_2", "Var1"]`. As the SD increased and the clusters overlapped more, the mean ARI decreased substantially to `r txt_ari["1_6", "Var1"]` at SD = 6.
+
+Multivariate clustering in Scenario 1 had a higher mean ARI than univariate clustering at every SD. At SD = 2 and SD = 3 the mean ARI was essentially perfect (`r txt_ari["1_2", "All3"]` and `r txt_ari["1_3", "All3"]`). It then decreased slightly as the clusters overlapped more, reaching `r txt_ari["1_6", "All3"]` at SD = 6, which is still much higher than the univariate clustering.
+
+**Scenario 2.** In this scenario, each variable isolated only one cluster with a distinct mean. Univariate clustering recovered the clusters poorly. The highest mean ARI for Variable 1 was `r txt_ari["2_2", "Var1"]` at SD = 2, and it decreased for larger SD values, reaching `r txt_ari["2_6", "Var1"]` at SD = 6, which is not much better than random chance.
+
+Multivariate clustering did much better, with a mean ARI of `r txt_ari["2_2", "All3"]` at SD = 2, and it decreased for larger SD values. At SD = 6 the mean ARI was `r txt_ari["2_6", "All3"]`, showing a larger dropoff in cluster recovery than in Scenario 1.
+
+**Scenario 3.** In this scenario, every cluster had a distinct mean for Variable 1, and identical mean values for Variables 2 and 3. For univariate clustering, k-means recovered the clusters well using Variable 1, with a mean ARI of `r txt_ari["3_2", "Var1"]` at SD = 2, dropping to `r txt_ari["3_6", "Var1"]` at SD = 6. This drop is nearly the same as for a single variable in Scenario 1, because Variable 1 has the same cluster means and SD in both scenarios, and the drop is larger than in Scenario 2. Variables 2 and 3 had a mean ARI of about 0 at every SD.
+
+Multivariate clustering performed almost the same as univariate clustering with Variable 1. From SD = 2 through SD = 4 the values were almost identical, for example `r txt_ari["3_4", "Var1"]` for Variable 1 and `r txt_ari["3_4", "All3"]` for all three variables at SD = 4. At SD = 5 and SD = 6 the multivariate clustering appears to do less well than the univariate clustering (`r txt_ari["3_5", "All3"]` versus `r txt_ari["3_5", "Var1"]` at SD = 5, and `r txt_ari["3_6", "All3"]` versus `r txt_ari["3_6", "Var1"]` at SD = 6).
+
+```{r summary-table}
+# Print the table in a clean format with three decimal places
+knitr::kable(summary_table, digits = 3,
+             col.names = c("Scenario", "SD", "Variable 1 alone", "Variable 2 alone", "Variable 3 alone", "All three variables"),
+             caption = "Mean adjusted Rand index over 500 simulated datasets for each scenario and standard deviation, for k-means on each single variable and on all three variables.")
+```
+
+```{r line-plots, fig.width=7, fig.height=3.2, fig.cap="Mean adjusted Rand index against standard deviation, with one line per method. In Scenarios 1 and 2 the three single-variable lines overlap. In Scenario 3 the lines for Variable 1 alone and for all three variables nearly overlap, and the lines for Variables 2 and 3 lie at zero."}
+# Place three plots side by side in one row
+par(mfrow = c(1, 3), mar = c(4, 4, 3, 1))
+
+# Scenario 1: keep only the rows of the summary table that belong to scenario 1
+rows1 <- summary_table[summary_table$Scenario == "1", ]
+
+# Start the plot with the all-variables line, fixing the y-axis from 0 to 1 so panels compare directly
+plot(rows1$SD, rows1$All3, type = "b", pch = 16, col = "black", ylim = c(0, 1),
+     xlab = "Standard deviation", ylab = "Mean adjusted Rand index", main = "Scenario 1")
+
+# Add the three single-variable lines on top of the plot
+lines(rows1$SD, rows1$Var1, type = "b", pch = 1, col = "red")
+lines(rows1$SD, rows1$Var2, type = "b", pch = 2, col = "blue")
+lines(rows1$SD, rows1$Var3, type = "b", pch = 3, col = "darkgreen")
+
+# Add a legend in the lower left corner of the first panel
+legend("bottomleft", legend = c("All 3", "Var 1", "Var 2", "Var 3"),
+       col = c("black", "red", "blue", "darkgreen"), pch = c(16, 1, 2, 3), lty = 1, cex = 0.7)
+
+# Scenario 2: same steps with the rows for scenario 2
+rows2 <- summary_table[summary_table$Scenario == "2", ]
+plot(rows2$SD, rows2$All3, type = "b", pch = 16, col = "black", ylim = c(0, 1),
+     xlab = "Standard deviation", ylab = "Mean adjusted Rand index", main = "Scenario 2")
+lines(rows2$SD, rows2$Var1, type = "b", pch = 1, col = "red")
+lines(rows2$SD, rows2$Var2, type = "b", pch = 2, col = "blue")
+lines(rows2$SD, rows2$Var3, type = "b", pch = 3, col = "darkgreen")
+
+# Scenario 3: same steps with the rows for scenario 3
+rows3 <- summary_table[summary_table$Scenario == "3", ]
+plot(rows3$SD, rows3$All3, type = "b", pch = 16, col = "black", ylim = c(0, 1),
+     xlab = "Standard deviation", ylab = "Mean adjusted Rand index", main = "Scenario 3")
+lines(rows3$SD, rows3$Var1, type = "b", pch = 1, col = "red")
+lines(rows3$SD, rows3$Var2, type = "b", pch = 2, col = "blue")
+lines(rows3$SD, rows3$Var3, type = "b", pch = 3, col = "darkgreen")
+```
+
+# Discussion
+
+The results show that for k-means, clustering on all three variables gave a higher mean ARI than clustering on any single variable in Scenarios 1 and 2, at every SD. In Scenario 2, no single variable could separate all three clusters, so univariate clustering performed poorly at every SD. In Scenario 3, where only Variable 1 carried signal, clustering on Variable 1 alone and clustering on all three variables performed almost the same through SD = 4. At SD = 5 and SD = 6 the mean ARI for Variable 1 alone was slightly higher than for all three variables (`r txt_ari["3_5", "Var1"]` versus `r txt_ari["3_5", "All3"]`, and `r txt_ari["3_6", "Var1"]` versus `r txt_ari["3_6", "All3"]`), which fits the expectation that the two noise variables could lower the multivariate result.
+
+In Scenario 3, the true groups were known, so it was possible to see that clustering on Variable 2 or Variable 3 alone gave a mean ARI of about 0. When it is not known which variables carry signal, univariate clustering of each variable could identify variables with little signal on their own. However, this does not mean that there is no shared signal across multiple variables.
+
+There are several limitations and possible extensions for this type of simulation. The k-means algorithm requires that the number of clusters is known before clustering, and all of the clustering for this paper began with the true value $k = 3$. In practice the number of clusters is usually unknown, and choosing $k$ is part of the analysis. A larger simulation study would have each of the methods choose the best $k$. For example, in Scenario 2 each variable isolates only one cluster, so a univariate analysis might choose $k = 2$ instead of the true $k = 3$, especially at small SD. k-means also tends to work well when clusters have similar sizes and similar spread, and are dense and spherical in shape. In this simulation every cluster had exactly 200 observations and the same SD, the variables were independent, and the data were generated from normal distributions. This was done to limit the number of factors and focus on the multivariate versus univariate comparison.
+
+Extensions include generating correlated variables, unequal cluster sizes, and non-spherical clusters, and using other clustering methods to compare the multivariate versus univariate approach in terms of signal spread and noise. Scenario 3 showed that two noise variables had almost no effect at smaller SD values, so another extension is to add more noise variables and find how many it takes to lower the multivariate mean ARI at small SD.
+
+# References
